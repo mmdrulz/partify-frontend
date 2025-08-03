@@ -1,350 +1,443 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
+import { useState } from 'react';
 
-export default function Home() {
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [preview, setPreview] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+export default function PartifyApp() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [annotatedImage, setAnnotatedImage] = useState(null);
+
+  const BACKEND_URL = 'https://partify-backend.onrender.com';
 
   const handleFileSelect = (event) => {
-    const file = event.target.files[0]
+    const file = event.target.files[0];
     if (file) {
-      setSelectedFile(file)
-      setPreview(URL.createObjectURL(file))
-      setResult(null)
-      setError(null)
+      setSelectedFile(file);
+      setError(null);
+      setResult(null);
+      setAnnotatedImage(null);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+      };
+      reader.readAsDataURL(file);
     }
-  }
+  };
 
-  const handleAnalyze = async () => {
-    if (!selectedFile) return
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setSelectedFile(file);
+      setError(null);
+      setResult(null);
+      setAnnotatedImage(null);
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-    setLoading(true)
-    setError(null)
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  const analyzeImage = async () => {
+    if (!selectedFile) {
+      setError('Please select an image first');
+      return;
+    }
+
+    setAnalyzing(true);
+    setError(null);
+    setResult(null);
 
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
+      const formData = new FormData();
+      formData.append('file', selectedFile);
 
-      console.log('Sending request to backend...')
-
-      const response = await fetch(`https://partify-backend.onrender.com/predict`, {
+      console.log('Sending request to:', `${BACKEND_URL}/predict`);
+      
+      const response = await fetch(`${BACKEND_URL}/predict`, {
         method: 'POST',
         body: formData,
-      })
+      });
 
-      console.log('Response status:', response.status)
-
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        const errorText = await response.text()
-        console.log('Error response:', errorText)
-        throw new Error(`Server error: ${response.status}`)
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json()
-      console.log('Success response:', data)
-      setResult(data)
+      const data = await response.json();
+      console.log('Analysis result:', data);
+
+      if (data.success) {
+        setResult(data);
+        setAnnotatedImage(data.annotated_image);
+      } else {
+        setError(data.error || 'Analysis failed');
+      }
     } catch (err) {
-      console.error('Fetch error:', err)
-      setError(`Failed to analyze image: ${err.message}`)
+      console.error('Analysis error:', err);
+      setError(`Failed to analyze image: ${err.message}`);
     } finally {
-      setLoading(false)
+      setAnalyzing(false);
     }
-  }
+  };
 
-  const handleGetQuote = () => {
-    if (!result?.whatsapp_url) return
-    
-    // Save image to user's device for easy sharing
-    if (selectedFile) {
-      const link = document.createElement('a')
-      link.href = preview
-      link.download = `car-damage-${result.prediction.toLowerCase().replace(/\s+/g, '-')}.jpg`
-      // link.click() // Uncomment if you want auto-download
+  const openWhatsApp = () => {
+    if (result && result.whatsapp_url) {
+      window.open(result.whatsapp_url, '_blank');
     }
-    
-    // Open WhatsApp
-    window.open(result.whatsapp_url, '_blank')
-  }
+  };
 
-  const downloadImage = () => {
-    if (!preview) return
-    
-    const link = document.createElement('a')
-    link.href = preview
-    link.download = `car-damage-${result?.prediction?.toLowerCase().replace(/\s+/g, '-') || 'photo'}.jpg`
-    link.click()
-  }
+  const downloadAnnotatedImage = () => {
+    if (annotatedImage) {
+      const link = document.createElement('a');
+      link.href = annotatedImage;
+      link.download = 'damage-analysis-with-detections.jpg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const resetAnalysis = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    setAnnotatedImage(null);
+    setResult(null);
+    setError(null);
+  };
 
   return (
-    <div className="min-h-screen" style={{
-      background: 'linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%)'
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '20px',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <div style={{
+        maxWidth: '600px',
+        margin: '0 auto',
+        background: 'white',
+        borderRadius: '20px',
+        padding: '30px',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.1)'
+      }}>
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
-            <span>🚗</span> PartiFy
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <h1 style={{
+            fontSize: '2.5rem',
+            fontWeight: 'bold',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            margin: '0 0 10px 0'
+          }}>
+            🚗 PartiFy
           </h1>
-          <p className="text-gray-600 text-lg">
-            AI-Powered Car Damage Detection & Instant Quotes
+          <p style={{
+            color: '#666',
+            fontSize: '1.1rem',
+            margin: 0
+          }}>
+            AI-Powered Car Damage Detection
           </p>
-          <p className="text-sm text-gray-500 mt-2">
-            📱 Direct connection to garage: +971 58 262 9804
-          </p>
+          <div style={{
+            background: '#f0f8ff',
+            padding: '10px',
+            borderRadius: '10px',
+            marginTop: '15px',
+            border: '1px solid #e0e7ff'
+          }}>
+            📞 Garage Contact: <strong>+971 58 262 9804</strong>
+          </div>
         </div>
 
-        {/* Upload Section */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          padding: '24px',
-          marginBottom: '24px'
-        }}>
-          <div style={{
-            border: '2px dashed #d1d5db',
-            borderRadius: '12px',
-            padding: '32px',
-            textAlign: 'center',
-            transition: 'all 0.2s',
-            cursor: 'pointer'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.borderColor = '#3b82f6'
-            e.target.style.backgroundColor = '#eff6ff'
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.borderColor = '#d1d5db'
-            e.target.style.backgroundColor = 'transparent'
-          }}>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-              id="file-upload"
-            />
-            <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
-              <div>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📸</div>
+        {/* Upload Area */}
+        {!result && (
+          <div>
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              style={{
+                border: '3px dashed #667eea',
+                borderRadius: '15px',
+                padding: '40px 20px',
+                textAlign: 'center',
+                backgroundColor: '#f8faff',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                marginBottom: '20px'
+              }}
+              onClick={() => document.getElementById('fileInput').click()}
+            >
+              <input
+                id="fileInput"
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+              
+              {imagePreview ? (
                 <div>
-                  <p style={{ fontSize: '1.25rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Upload Car Damage Photo
-                  </p>
-                  <p style={{ color: '#6b7280' }}>
-                    Click to select a clear photo of the damaged area
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '300px',
+                      borderRadius: '10px',
+                      marginBottom: '15px'
+                    }}
+                  />
+                  <p style={{ color: '#667eea', fontWeight: 'bold' }}>
+                    ✅ Image Ready for Analysis
                   </p>
                 </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        {/* Preview Section */}
-        {preview && (
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-            padding: '24px',
-            marginBottom: '24px'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>Selected Image:</h3>
-            <img
-              src={preview}
-              alt="Preview"
-              style={{
-                width: '100%',
-                maxHeight: '256px',
-                objectFit: 'contain',
-                borderRadius: '8px',
-                border: '1px solid #e5e7eb'
-              }}
-            />
-            
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-              <button
-                onClick={handleAnalyze}
-                disabled={loading}
-                style={{
-                  flex: 1,
-                  backgroundColor: loading ? '#9ca3af' : '#2563eb',
-                  color: 'white',
-                  fontWeight: '600',
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading) e.target.style.backgroundColor = '#1d4ed8'
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading) e.target.style.backgroundColor = '#2563eb'
-                }}
-              >
-                {loading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{
-                      width: '20px',
-                      height: '20px',
-                      border: '2px solid white',
-                      borderTop: '2px solid transparent',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginRight: '8px'
-                    }}></div>
-                    Analyzing...
-                  </div>
-                ) : (
-                  'Analyze Damage 🔍'
-                )}
-              </button>
-              
-              <button
-                onClick={downloadImage}
-                style={{
-                  backgroundColor: '#6b7280',
-                  color: 'white',
-                  fontWeight: '600',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => e.target.style.backgroundColor = '#4b5563'}
-                onMouseLeave={(e) => e.target.style.backgroundColor = '#6b7280'}
-                title="Download image to send to garage"
-              >
-                📥
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Results Section */}
-        {result && (
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-            padding: '24px',
-            marginBottom: '24px'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>AI Detection Results:</h3>
-            
-            <div style={{
-              backgroundColor: '#f0fdf4',
-              border: '1px solid #bbf7d0',
-              borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '1rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ color: '#16a34a', fontSize: '1.25rem', marginRight: '8px' }}>✅</span>
-                <span style={{ fontWeight: '600', color: '#15803d' }}>Damage Detected</span>
-              </div>
-              <p style={{ fontSize: '1.125rem', marginBottom: '4px' }}>
-                <strong>Damaged Part:</strong> {result.prediction}
-              </p>
-              {result.confidence && (
-                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                  AI Confidence: {Math.round(result.confidence * 100)}%
-                </p>
+              ) : (
+                <div>
+                  <div style={{ fontSize: '3rem', marginBottom: '15px' }}>📸</div>
+                  <p style={{
+                    fontSize: '1.2rem',
+                    fontWeight: 'bold',
+                    color: '#667eea',
+                    margin: '0 0 10px 0'
+                  }}>
+                    Upload Car Damage Photo
+                  </p>
+                  <p style={{ color: '#666', margin: 0 }}>
+                    Drag & drop or click to select
+                  </p>
+                </div>
               )}
             </div>
 
-            {/* Instructions */}
-            <div style={{
-              backgroundColor: '#fffbeb',
-              border: '1px solid #fed7aa',
-              borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '1rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '1.25rem', marginRight: '8px' }}>💡</span>
-                <span style={{ fontWeight: '600', color: '#92400e' }}>Next Steps:</span>
+            {selectedFile && (
+              <button
+                onClick={analyzeImage}
+                disabled={analyzing}
+                style={{
+                  width: '100%',
+                  padding: '15px',
+                  background: analyzing ? '#ccc' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold',
+                  cursor: analyzing ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                {analyzing ? '🔍 Analyzing with AI...' : '🚀 Analyze Damage'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div style={{
+            background: '#fee2e2',
+            border: '1px solid #fecaca',
+            borderRadius: '10px',
+            padding: '15px',
+            marginBottom: '20px'
+          }}>
+            <p style={{ color: '#dc2626', margin: 0, fontWeight: 'bold' }}>
+              ❌ {error}
+            </p>
+          </div>
+        )}
+
+        {/* Results Display */}
+        {result && result.success && (
+          <div>
+            {/* Annotated Image */}
+            {annotatedImage && (
+              <div style={{ marginBottom: '25px', textAlign: 'center' }}>
+                <h3 style={{
+                  color: '#374151',
+                  marginBottom: '15px',
+                  fontSize: '1.3rem'
+                }}>
+                  📊 AI Analysis with Detection Boxes
+                </h3>
+                <div style={{
+                  border: '3px solid #10b981',
+                  borderRadius: '15px',
+                  padding: '10px',
+                  background: '#f0fdf4'
+                }}>
+                  <img
+                    src={annotatedImage}
+                    alt="Damage Analysis"
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      borderRadius: '10px',
+                      marginBottom: '15px'
+                    }}
+                  />
+                  <button
+                    onClick={downloadAnnotatedImage}
+                    style={{
+                      padding: '10px 20px',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      marginRight: '10px'
+                    }}
+                  >
+                    📥 Download Analysis
+                  </button>
+                </div>
               </div>
-              <ol style={{ margin: 0, paddingLeft: '1.5rem', color: '#92400e' }}>
-                <li>Click "Get Quote" to open WhatsApp</li>
-                <li>Send your car damage photo to the garage</li>
-                <li>Receive your repair quote within 30 minutes</li>
-              </ol>
+            )}
+
+            {/* Analysis Results */}
+            <div style={{
+              background: result.analysis.damage_detected ? '#f0fdf4' : '#fef3c7',
+              border: `2px solid ${result.analysis.damage_detected ? '#10b981' : '#f59e0b'}`,
+              borderRadius: '15px',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{
+                color: result.analysis.damage_detected ? '#065f46' : '#92400e',
+                marginBottom: '15px',
+                fontSize: '1.3rem'
+              }}>
+                {result.analysis.damage_detected ? '🔍 Damage Detected!' : '✅ No Major Damage Found'}
+              </h3>
+              
+              <p style={{
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                color: '#374151',
+                marginBottom: '15px'
+              }}>
+                {result.analysis.summary}
+              </p>
+
+              {result.analysis.damage_detected && (
+                <div>
+                  <h4 style={{ color: '#374151', marginBottom: '10px' }}>
+                    🎯 Detected Issues:
+                  </h4>
+                  {result.analysis.damage_parts.slice(0, 3).map((damage, index) => (
+                    <div key={index} style={{
+                      background: 'white',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      border: '1px solid #e5e7eb'
+                    }}>
+                      <span style={{ fontWeight: 'bold' }}>
+                        {damage.confidence > 0.8 ? '🔴' : damage.confidence > 0.6 ? '🟡' : '⚪'} 
+                        {' '}{damage.type}
+                      </span>
+                      <span style={{ float: 'right', color: '#6b7280' }}>
+                        {(damage.confidence * 100).toFixed(1)}% confidence
+                      </span>
+                    </div>
+                  ))}
+                  
+                  <div style={{
+                    marginTop: '15px',
+                    padding: '10px',
+                    background: 'rgba(255,255,255,0.5)',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    color: '#374151'
+                  }}>
+                    📊 Total Detections: <strong>{result.analysis.total_detections}</strong><br/>
+                    🎯 Highest Confidence: <strong>{(result.analysis.highest_confidence * 100).toFixed(1)}%</strong>
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* WhatsApp Integration */}
+            <div style={{
+              background: '#dcfce7',
+              border: '2px solid #16a34a',
+              borderRadius: '15px',
+              padding: '20px',
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ color: '#15803d', marginBottom: '15px' }}>
+                📱 Get Professional Quote
+              </h3>
+              
+              <button
+                onClick={openWhatsApp}
+                style={{
+                  width: '100%',
+                  padding: '15px',
+                  background: '#25d366',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  marginBottom: '15px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px'
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>💬</span>
+                Send Analysis to Garage via WhatsApp
+              </button>
+              
+              <p style={{
+                color: '#15803d',
+                fontSize: '0.9rem',
+                margin: 0,
+                fontStyle: 'italic'
+              }}>
+                Analysis report and annotated image will be shared with {result.garage_number}
+              </p>
+            </div>
+
+            {/* Reset Button */}
             <button
-              onClick={handleGetQuote}
+              onClick={resetAnalysis}
               style={{
                 width: '100%',
-                backgroundColor: '#16a34a',
+                padding: '12px',
+                background: '#6b7280',
                 color: 'white',
-                fontWeight: '600',
-                padding: '16px 24px',
-                borderRadius: '8px',
                 border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
+                borderRadius: '10px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
               }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = '#15803d'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = '#16a34a'}
             >
-              <span style={{ marginRight: '8px' }}>💬</span>
-              Get Quote from Garage (+971 58 262 9804)
+              🔄 Analyze Another Image
             </button>
           </div>
         )}
-
-        {/* Error Section */}
-        {error && (
-          <div style={{
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '24px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span style={{ color: '#dc2626', fontSize: '1.25rem', marginRight: '8px' }}>❌</span>
-              <span style={{ color: '#b91c1c' }}>{error}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Garage Info */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          padding: '24px',
-          textAlign: 'center'
-        }}>
-          <h4 style={{ fontWeight: '600', marginBottom: '1rem', color: '#374151' }}>
-            🔧 Professional Auto Repair Service
-          </h4>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            WhatsApp: +971 58 262 9804 • Usually responds within 30 minutes
-          </p>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-            Powered by AI • Get accurate repair quotes instantly
-          </p>
-        </div>
       </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
-  )
+  );
 }
